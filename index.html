@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="./styles.css" />
+    <title>Time Tracker</title>
+  </head>
+  <body>
+    <h1>Настройки</h1>
+    <label for="allowed-time">Разрешенное время (в минутах):</label>
+    <input type="number" id="allowed-time" value="60" />
+    <button id="save-settings">Сохранить</button>
+
+    <h2>Активные приложения</h2>
+    <ul id="active-apps"></ul>
+    <!-- Список активных приложений -->
+
+    <script>
+      const { ipcRenderer } = require("electron");
+      const parentPassword = "123";
+
+      document.getElementById("save-settings").addEventListener("click", () => {
+        const pass = prompt("Пароль родителя:");
+        if (pass === parentPassword) {
+          const allowedTime =
+            document.getElementById("allowed-time").value * 60;
+          ipcRenderer.send("set-allowed-time", allowedTime);
+          // window.electron.send('set-allowed-time', allowedTime);
+        } else {
+          alert("Неверный пароль!");
+          // return
+        }
+      });
+
+      // Обработчик получения списка активных приложений из основного процесса
+      window.electron.on("active-apps", (apps) => {
+        const appsList = document.getElementById("active-apps");
+        const li = document.createElement("li");
+        li.textContent = new Date().toISOString;
+        li.className = "newTimePeriod"
+        appsList.appendChild(li);
+
+        apps.forEach((app) => {
+          const li = document.createElement("li");
+          li.textContent = app; // Добавляем название приложения
+          appsList.appendChild(li); // Вставляем в список
+        });
+      });
+
+      // window.electron.on('time-over', () => {
+      ipcRenderer.on("time-over", () => {
+        const pass =
+          "Время использования исчерпано! Введите пароль родителя для разблокировки.";
+        if (pass === parentPassword) {
+          //ipcRenderer.send("reset-timer");
+          ipcRenderer.send("stop-time");
+          // window.electron.send('reset-timer');
+        } else {
+          alert("Неверный пароль!");
+          // return
+        }
+        // Здесь добавьте логику обработки пароля
+      });
+    </script>
+  </body>
+</html>

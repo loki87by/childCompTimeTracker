@@ -1,0 +1,20 @@
+{
+    "name": "child_comp_task_tracker",
+    "version": "0.0.1",
+    "description": "app for control child working with computer time",
+    "main": "main.js",
+    "scripts": {
+        "start": "node main.js",
+        "electron": "electron .",
+        "build": "npm ci && npm run build"
+    },
+    "keywords": [],
+    "author": "Alexey Akulich",
+    "license": "MIT",
+    "devDependencies": {
+        "electron": "^35.1.5"
+    },
+    "dependencies": {
+        "node-wmi": "^0.0.5"
+    }
+}
