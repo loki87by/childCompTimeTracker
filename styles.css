@@ -1,8 +1,16 @@
 ul {
-    height: 500px;
-    overflow: scroll;
+    max-height: 50vh;
+    margin: 0;
+    overflow-y: auto;
 }
 
-.newTimePeriod {
-    color: 'red';
+h3 {
+    margin: 3px 0;
+}
+
+.reportsButtons {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
 }

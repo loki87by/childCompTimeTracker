@@ -15,6 +15,11 @@
         "electron": "^35.1.5"
     },
     "dependencies": {
-        "node-wmi": "^0.0.5"
+        "active-win": "^9.0.0",
+        "body-parser": "^2.2.0",
+        "express": "^5.1.0",
+        "node-addon-api": "^8.3.1",
+        "node-wmi": "^0.0.5",
+        "systeminformation": "^5.25.11"
     }
 }
