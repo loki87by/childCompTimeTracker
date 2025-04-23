@@ -3,7 +3,9 @@ param(
 )
 
 # Используем P/Invoke для вызова WinAPI
-if (-not [User32Keyboard]) {
+try {
+    [void][User32WinAPI]
+} catch {
 Add-Type @"
 using System;
 using System.Runtime.InteropServices;
