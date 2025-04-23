@@ -1,12 +1,44 @@
 const { exec } = require("child_process");
+const path = require("path");
+const dotenv = require("dotenv");
+
+const envPath = path.resolve(__dirname, ".env");
+
+dotenv.config({ path: envPath });
+
+const allowedApps = process.env["ALLOWED_APPS"].split(",");
+
+module.exports.manageWindow = (processName, power) => {
+  if (
+    allowedApps
+      .map((i) => i.toLowerCase())
+      .includes(processName.toLowerCase().trim())
+  )
+    return;
+  const psScript = path.join(
+    __dirname,
+    power ? "ManageWindows.ps1" : "SimulateKeyPress.ps1"
+  );
+  return new Promise((resolve, reject) => {
+    exec(
+      `powershell.exe -ExecutionPolicy Bypass -File "${psScript}" -processName "${processName}"`,
+      (error, stdout, stderr) => {
+        if (error) {
+          reject(`Ошибка: ${error.message}`);
+        }
+        if (stderr) {
+          reject(`Ошибка: ${stderr}`);
+        }
+        resolve(`${stdout}`);
+      }
+    );
+  });
+};
 
 module.exports.getActiveApplications = async () => {
   const command = `Get-Process | Where-Object { $_.MainWindowTitle } | Select-Object Id, CPU, ProcessName, StartTime, MainWindowHandle, Responding, MainWindowTitle | Format-Table -AutoSize`;
 
   const path = `C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`;
-
-  const allowedApps = ["Code", "AnyDesk", "mstsc", "PickerHost", "electron"];
-
   return new Promise((resolve, reject) => {
     exec(`${path} -Command "${command}"`, (error, stdout, stderr) => {
       if (error) {
@@ -34,7 +66,7 @@ module.exports.getActiveApplications = async () => {
             date: new Date(columns[3].split(".").reverse().join("-")),
             mwh: columns[5],
             res: columns[6],
-            title: columns.slice(7).join(' '),
+            title: columns.slice(7).join(" "),
           };
         });
       resolve(result.filter((i) => !allowedApps.includes(i.name)));
@@ -114,7 +146,7 @@ module.exports.getFullActivityReport = (data) => {
   const types = countByField(flattenedRanges, "type");
   const total = flattenedRanges.map((interval) => {
     const addTz = (hours) => {
-      return +hours + 3;
+      return +hours + 6;
     };
     const time1 = interval.ts1.toISOString().slice(11, 19).split(":");
     time1[0] = addTz(time1[0]);
@@ -122,7 +154,8 @@ module.exports.getFullActivityReport = (data) => {
     const time2 = interval.ts2.toISOString().slice(11, 19).split(":");
     time2[0] = addTz(time2[0]);
     const time2Tz = time2.join(":");
-    const timeRange = time1Tz === time2Tz ? `В ${time1Tz} ` : `С ${time1Tz} по ${time2Tz} `
+    const timeRange =
+      time1Tz === time2Tz ? `В ${time1Tz} ` : `С ${time1Tz} по ${time2Tz} `;
     return `${timeRange}- ${interval.body[0].type} на сайте: ${interval.body[0].src}`;
   });
   const result = { sources, types, total };

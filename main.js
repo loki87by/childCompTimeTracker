@@ -1,9 +1,22 @@
 const { app, BrowserWindow, Tray, Menu, ipcMain } = require("electron");
 const path = require("path");
-const { getActiveApplications, getFullActivityReport } = require("./utils");
+const {
+  getActiveApplications,
+  getFullActivityReport,
+  manageWindow,
+} = require("./utils");
 const express = require("express");
 const bodyParser = require("body-parser");
+const dotenv = require("dotenv");
 
+const envPath = path.resolve(__dirname, ".env");
+
+dotenv.config({ path: envPath });
+
+const VIDEO_PLAYERS = process.env["VIDEO_PLAYERS"].split(",");
+const BROWSER_LIST = process.env["BROWSER_LIST"].split(",");
+const parentPassword = process.env["PARENTS_PASSWORD"];
+const activityShifting = process.env["ACTIVITY_SHIFTING"];
 const expressApp = express();
 const port = 5326;
 const processes = [];
@@ -12,11 +25,22 @@ let chromeActivityMessages = [];
 let mainWindow;
 let tray;
 let timer;
+let uncontrol = 0;
 let activityTimer = 0;
-let allowedTime = 60;
+let allowedTime = +process.env["ALLOWED_TIME_DEFAULT"];
+let iterationTime = +process.env["ITERATION_TIME_DEFAULT"];
+let iterationTimeCount = 0;
 let isTimeOver = false;
 let isFullscreen = false;
+let chromeVideoActivity = false;
+let vmcVideoActivity = false;
+let currentVideoPlayer;
+let currentBrowser;
 let date = new Date().toISOString().slice(0, 10);
+
+if (iterationTime >= allowedTime) {
+  iterationTime = 24 * 60 * 60
+}
 
 expressApp.use(bodyParser.json());
 
@@ -25,6 +49,11 @@ expressApp.post("/activity-status", (req, res) => {
     body: req.body,
     ts: new Date().toISOString().slice(0, 19),
   });
+  if (req.body.activity && req.body.type === "Воспроизведение видео") {
+    chromeVideoActivity = true;
+  } else {
+    chromeVideoActivity = false;
+  }
   res.sendStatus(200);
 });
 
@@ -37,6 +66,7 @@ const createWindow = () => {
     width: 800,
     height: 600,
     frame: true,
+    icon: path.join(__dirname, "favicon.ico"),
     fullscreen: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -49,7 +79,9 @@ const createWindow = () => {
 
   mainWindow.on("close", (event) => {
     event.preventDefault();
-    mainWindow.hide();
+    if (!isFullscreen) {
+      mainWindow.hide();
+    }
   });
 
   mainWindow.webContents.on("before-input-event", (event, input) => {
@@ -57,14 +89,36 @@ const createWindow = () => {
       event.preventDefault();
     }
   });
+
+  mainWindow.webContents.on("did-finish-load", () => {
+    mainWindow.webContents.send("send-password", parentPassword);
+  });
 };
 
-function openFullscreen() {
+async function videoBlocker() {
+  if (vmcVideoActivity && currentVideoPlayer) {
+    await manageWindow(currentVideoPlayer);
+    vmcVideoActivity = false;
+    currentVideoPlayer = null;
+  }
+  if (chromeVideoActivity) {
+    const res = await manageWindow(currentBrowser);
+    if (res !== "OK") {
+      await manageWindow(currentBrowser, true);
+    }
+    chromeVideoActivity = false;
+  }
+  return;
+}
+
+async function openFullscreen() {
   if (!isFullscreen) {
+    await videoBlocker();
+    isFullscreen = true;
     mainWindow.setFullScreen(true);
     mainWindow.setAlwaysOnTop(true);
     mainWindow.setMenuBarVisibility(false);
-    isFullscreen = true;
+    mainWindow.focus();
   }
 }
 
@@ -73,7 +127,49 @@ function closeFullscreen() {
     mainWindow.setFullScreen(false);
     mainWindow.setAlwaysOnTop(false);
     isFullscreen = false;
+    mainWindow.hide()
   }
+}
+
+function updateBrowserActivity(array) {
+  const arr = array.slice();
+  const oneMinute = activityShifting * 1000;
+  const length = arr.length;
+  let activeIndices = [];
+
+  for (let i = 0; i < length; i++) {
+    if (arr[i].body.activity) {
+      activeIndices.push(i);
+    }
+  }
+
+  for (let i = 0; i < activeIndices.length - 1; i++) {
+    const startIdx = activeIndices[i];
+    const endIdx = activeIndices[i + 1];
+    const startTime = new Date(arr[startIdx].ts).getTime();
+    const endTime = new Date(arr[endIdx].ts).getTime();
+
+    if (
+      endTime - startTime < oneMinute &&
+      arr[startIdx].body.src === arr[endIdx].body.src &&
+      [`Активность мыши`, `Ввод текста`].includes(arr[startIdx].body.type) &&
+      [`Активность мыши`, `Ввод текста`].includes(arr[endIdx].body.type)
+    ) {
+      for (let j = startIdx + 1; j < endIdx; j++) {
+        const current = arr[j];
+
+        if (
+          !current.body.activity &&
+          current.body.type === arr[startIdx].body.type &&
+          current.body.src === arr[startIdx].body.src
+        ) {
+          current.body.activity = true;
+        }
+      }
+    }
+  }
+
+  return arr;
 }
 
 const getGoogleActivity = () => {
@@ -88,14 +184,16 @@ const getGoogleActivity = () => {
     }
     return p;
   }, []);
-  return filteredCAM.filter((i) => i.body.activity);
+  const changedBrowserActivity = updateBrowserActivity(filteredCAM);
+  return changedBrowserActivity.filter((i) => i.body.activity);
 };
 
 const getReport = () => {
   const report = processes.map((i) => {
     const { name, activeTime, title } = i;
-    const report =
-      name === "chrome" ? getFullActivityReport(getGoogleActivity()) : null;
+    const report = BROWSER_LIST.includes(name)
+      ? getFullActivityReport(getGoogleActivity())
+      : null;
     return { name, activeTime, title, report };
   });
   return report;
@@ -107,45 +205,65 @@ function checkChromeActivity(index) {
   processes[index].lifeTime = activitySeconds;
   processes[index].activeTime = activitySeconds;
   activityTimer += incrementor;
+  iterationTimeCount += incrementor;
 }
 
 function checkOtherActivity(index, app) {
+  function updateActivity() {
+    activityTimer += 1;
+    iterationTimeCount += 1;
+    processes[index].activeTime += 1;
+    if (VIDEO_PLAYERS.includes(app.name)) {
+      currentVideoPlayer = app.name;
+      vmcVideoActivity = true;
+    }
+  }
+
   if (processes[index].lifeTime < +app.cpu.replace(",", ".")) {
     const incrementor = +app.cpu.replace(",", ".") - processes[index].lifeTime;
     processes[index].lifeTime += incrementor;
 
     if (incrementor > 0.1) {
-      activityTimer += 1;
-      processes[index].activeTime += 1;
+      updateActivity();
     }
   }
 
   if (processes[index].mvh !== app.mvh) {
     processes[index].mvh = app.mvh;
-    activityTimer += 1;
-    processes[index].activeTime += 1;
+    updateActivity();
   }
 
   if (processes[index].res !== app.res) {
     processes[index].res = app.res;
 
     if (app.res) {
-      activityTimer += 1;
-      processes[index].activeTime += 1;
+      updateActivity();
     }
   }
 }
 
 async function checkActiveApplications() {
+  if (Boolean(uncontrol)) {
+    activityTimer = 0;
+    iterationTimeCount = 0;
+    isTimeOver = false;
+    isFullscreen = false;
+    chromeVideoActivity = false;
+    vmcVideoActivity = false;
+    return;
+  }
   if (new Date().toISOString().slice(0, 10) !== date) {
     date = new Date().toISOString().slice(0, 10);
     processes.forEach((i) => (i.date = new Date()));
     activityTimer = 0;
+    iterationTimeCount = 0;
   }
 
   if (!isTimeOver) {
     try {
       const apps = await getActiveApplications();
+      vmcVideoActivity = false;
+      currentVideoPlayer = null;
       apps.forEach((app) => {
         const index = processes.findIndex(
           (i) => i.name === app.name && i.id === app.id
@@ -157,39 +275,45 @@ async function checkActiveApplications() {
             date: app.date,
             mwh: app.mwh,
             res: app.res,
-            lifeTime: app.name === "chrome" ? 0 : +app.cpu.replace(",", "."),
+            lifeTime: BROWSER_LIST.includes(app.name)
+              ? 0
+              : +app.cpu.replace(",", "."),
             activeTime: 0,
-            title: app.title
+            title: app.title,
           });
         } else {
-          if (processes[index].name === "chrome") {
+          if (BROWSER_LIST.includes(processes[index].name)) {
+            currentBrowser = processes[index].name;
             checkChromeActivity(index);
           } else {
             checkOtherActivity(index, app);
           }
         }
-        //console.log("activityTimer: ", activityTimer);
       });
     } catch (err) {
       console.error("Ошибка при получении активных приложений:", err);
     }
-    //console.log("processes: ", processes)
   }
 }
 
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+}
+
+app.on('second-instance', (event, commandLine, workingDirectory) => {
+  if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+  }
+});
+
 app.on("ready", () => {
-  tray = new Tray("./icon-100.png");
+  tray = new Tray(path.join(__dirname, "icon-100.png"));
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: "Настройки",
+      label: "Развернуть",
       click: () => {
         mainWindow.show();
-      },
-    },
-    {
-      label: "Выйти",
-      click: () => {
-        app.quit();
       },
     },
   ]);
@@ -206,21 +330,51 @@ app.on("ready", () => {
 });
 
 setInterval(() => {
+  if (iterationTimeCount > iterationTime) {
+    if (!isTimeOver) {
+      const blockedTime = iterationTime * 2;
+      mainWindow.webContents.send("time-pause", blockedTime);
+      isTimeOver = true;
+      openFullscreen();
+      setTimeout(() => {
+        closeFullscreen();
+        iterationTimeCount = 0;
+        isTimeOver = false;
+        mainWindow.webContents.send("time-start");
+      }, blockedTime * 1000);
+    }
+  }
+}, 1000);
+setInterval(() => {
   if (activityTimer >= allowedTime) {
-    isTimeOver = true;
-    mainWindow.webContents.send("time-over");
-    openFullscreen();
+    if (!isTimeOver) {
+      mainWindow.webContents.send("time-over");
+      isTimeOver = true;
+      openFullscreen();
+    }
   }
 }, 1000);
 
 ipcMain.on("reset-timer", () => {
   activityTimer = 0;
+  iterationTimeCount = 0;
   isTimeOver = false;
   closeFullscreen();
 });
 
 ipcMain.on("set-allowed-time", (event, time) => {
   allowedTime = time;
+});
+
+ipcMain.on("set-iterations-time", (event, time) => {
+  iterationTime = time;
+  if (time >= allowedTime) {
+    iterationTime = 24 * 60 * 60
+  }
+});
+
+ipcMain.on("set-uncontrol-range", (event, val) => {
+  uncontrol = +val;
 });
 
 ipcMain.on("stop-time", () => {

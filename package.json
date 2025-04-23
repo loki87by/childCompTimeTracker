@@ -4,19 +4,20 @@
     "description": "app for control child working with computer time",
     "main": "main.js",
     "scripts": {
-        "start": "node main.js",
         "electron": "electron .",
-        "build": "npm ci && npm run build"
+        "pack": "electron-packager . comp_time_tracker --platform=win32 --arch=x64 --out=dist/ --overwrite"
     },
     "keywords": [],
     "author": "Alexey Akulich",
     "license": "MIT",
     "devDependencies": {
-        "electron": "^35.1.5"
+        "electron": "^35.1.5",
+        "electron-packager": "^17.1.2"
     },
     "dependencies": {
         "active-win": "^9.0.0",
         "body-parser": "^2.2.0",
+        "dotenv": "^16.5.0",
         "express": "^5.1.0",
         "node-addon-api": "^8.3.1",
         "node-wmi": "^0.0.5",

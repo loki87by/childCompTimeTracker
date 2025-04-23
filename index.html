@@ -7,12 +7,27 @@
     <title>Time Tracker</title>
   </head>
   <body>
-    <h1>Настройки</h1>
-    <label for="allowed-time">Разрешенное время (в минутах):</label>
-    <input type="number" id="allowed-time" value="1" />
+    <label for="allowed-time">Разрешено в день (в минутах):</label>
+    <input type="number" id="allowed-time" value="" placeholder="Ввести время" />
     <label for="password">Пароль:</label>
     <input type="password" id="password" value="" />
     <button id="save-settings">Сохранить</button>
+    
+    <div id="iteration">
+      <label for="iteration-time">Разрешено минут подряд:</label>
+      <input type="number" id="iteration-time" value="" placeholder="Ввести время" />
+      <label for="passw">Пароль:</label>
+      <input type="password" id="passw" value="" />
+      <button id="save-iterations">Сохранить</button>
+    </div>
+    
+    <div id="uncontrol">
+      <label for="uncontrol-range">Родительский доступ:</label>
+      <input type="range" id="uncontrol-range" value="0" min="0" max="1" step="1" />
+      <label for="passv">Пароль:</label>
+      <input type="password" id="passv" value="" />
+      <button id="save-uncontrol">Сохранить</button>
+    </div>
 
     <div hidden id="pass">
       <label for="alert"
@@ -23,193 +38,31 @@
       <button id="login">Разблокировать</button>
     </div>
 
+    <div hidden id="pause">
+      <h2>Пора сделать перерыв.</h2>
+      <h3 id="time-count"></h>
+    </div>
+
     <div id="activity">
       <button id="story-button">Посмотреть историю активности</button>
       <h2 hidden>История активности:</h2>
       <ul hidden id="active-apps"></ul>
       <button hidden>Скрыть историю активности</button>
     </div>
-    <!-- 
+    
     <script>
-      const parentPassword = "123";
+      let parentPassword;
+      window.electron.on('send-password', (password) => {
+        parentPassword = password;
+    });
       let showActivityStore = false;
-      const activityChildren = document
-        .getElementById("activity")
-        .querySelectorAll("*");
-      const passContainer = document.getElementById("pass");
-      const appsList = document.getElementById("active-apps");
-
-      document
-        .getElementById("activity")
-        .querySelectorAll("button")
-        .forEach((button) =>
-          button.addEventListener("click", () => {
-            activityChildren.forEach((i) => {
-              if (i.hidden) {
-                i.removeAttribute("hidden");
-              } else {
-                i.setAttribute("hidden", true);
-              }
-            });
-          })
-        );
-
-      document.getElementById("save-settings").addEventListener("click", () => {
-        const input = document.getElementById("password");
-        const pass = input.value;
-        input.value = "";
-        if (pass === parentPassword) {
-          const input = document.getElementById("allowed-time");
-          const allowedTime = input.value * 60;
-          window.electron.send("set-allowed-time", allowedTime);
-        } else {
-          alert("Неверный пароль!");
-          // return
-        }
-      });
-
-      document.getElementById("story-button").addEventListener("click", () => {
-        while (appsList.firstChild) {
-          appsList.removeChild(appsList.firstChild);
-        }
-        window.electron.send("request-active-apps");
-      });
-
-      const hoursCleaner = (hours) => {
-        switch (hours) {
-          case 0:
-            return "";
-          case 1:
-            return "1 час, ";
-          case 2:
-          case 3:
-          case 4:
-            return `${hours} часа, `;
-          default:
-            `${hours} часов, `;
-        }
-      };
-
-      const minsOrSecsCleaner = (units, isSeconds) => {
-        const str = `${units} ${isSeconds ? "секунд" : "минут"}`;
-        if (units === 0) return "";
-        if (units % 10 === 1 && units !== 11) return `${str}у${units > 0 && isSeconds ? '.' : ', '}`;
-        if (units % 10 === 2 && units !== 12) return `${str}ы${units > 0 && isSeconds ? '.' : ', '}`;
-        if (units % 10 === 3 && units !== 13) return `${str}ы${units > 0 && isSeconds ? '.' : ', '}`;
-        if (units % 10 === 4 && units !== 14) return `${str}ы${units > 0 && isSeconds ? '.' : ', '}`;
-        return `${str}${units > 0 && isSeconds ? '.' : ', '}`;
-      };
-
-      const timeUpdater = (seconds) => {
-        const hours = Math.floor(seconds / 60 / 60);
-        const timeWithoutHours = seconds - hours * 60 * 60;
-        const minutes = Math.floor(timeWithoutHours / 60);
-        const cleanedSeconds = timeWithoutHours - minutes * 60;
-        return `${hoursCleaner(hours)}${minsOrSecsCleaner(
-          minutes
-        )}${minsOrSecsCleaner(cleanedSeconds, true)}`;
-      };
-
-      function getReport(storage, name, selector) {
-        while (selector.firstChild) {
-          selector.removeChild(selector.firstChild);
-        }
-        const reportName = name.replace("Report", "");
-        const currentReport =
-          reportName === "total"
-            ? storage[reportName]
-            : Object.entries(storage[reportName]).map(
-                (entry) =>
-                  `${reportName === "sources" ? "На сайте " : "Активность "} "${
-                    entry[0]
-                  }" ${
-                    reportName === "sources" ? "провел " : "проведено "
-                  } ${timeUpdater(+entry[1])}`
-              );
-        currentReport.forEach((i) => {
-          const li = document.createElement("li");
-          li.textContent = i;
-          selector.appendChild(li);
-        });
-      }
-
-      window.electron.on("active-apps", (apps) => {
-        appsList.innerHTML = "";
-
-        if (apps.length === 0) {
-          const li = document.createElement("li");
-          li.textContent = "Нет активных приложений.";
-          appsList.appendChild(li);
-        } else {
-          apps.forEach((app) => {
-            const li = document.createElement("li");
-            const div = document.createElement("div");
-            const h1 = document.createElement("h3");
-            h1.textContent = app.name;
-            const h2 = document.createElement("h3");
-            h2.textContent = app.lifeTime;
-            const h3 = document.createElement("h3");
-            h3.textContent = app.date;
-            appsList.appendChild(li);
-            li.appendChild(div);
-            div.appendChild(h1);
-            div.appendChild(h2);
-            div.appendChild(h3);
-
-            if (app.report) {
-              const ul = document.createElement("ul");
-              ul.id = "reportList";
-              const reportsDiv = document.createElement("div");
-              reportsDiv.className = "reportsButtons";
-              const button1 = document.createElement("button");
-              button1.id = "sourcesReport";
-              button1.textContent = "Где был";
-              const button2 = document.createElement("button");
-              button2.id = "typesReport";
-              button2.textContent = "Что делал";
-              const button3 = document.createElement("button");
-              button3.id = "totalReport";
-              button3.textContent = "Расшифровка";
-              div.appendChild(reportsDiv);
-              reportsDiv.appendChild(button1);
-              reportsDiv.appendChild(button2);
-              reportsDiv.appendChild(button3);
-              div.appendChild(ul);
-              [button1, button2, button3].forEach((button) =>
-                button.addEventListener("click", () => {
-                  getReport(app.report, button.id, ul);
-                })
-              );
-            }
-          });
-        }
-      });
-
-      document.getElementById("login").addEventListener("click", () => {
-        const input = document.getElementById("alert");
-        const pass = input.value;
-        input.value = "";
-        if (pass === parentPassword) {
-          window.electron.send("reset-timer");
-          passContainer.hidden = true;
-        } else {
-          alert("Неверный пароль!");
-          // return
-        }
-      });
-
-      window.electron.on("time-over", () => {
-        passContainer.hidden = false;
-      });
-    </script> -->
-    <script>
-      const parentPassword = "123";
-      let showActivityStore = false;
+      let blockedTime;
 
       const activityChildren = document
         .getElementById("activity")
         .querySelectorAll("*");
       const passContainer = document.getElementById("pass");
+      const pauseContainer = document.getElementById("pause");
       const appsList = document.getElementById("active-apps");
 
       const clearNode = (node) => {
@@ -232,19 +85,24 @@
 
       addClickListener("#activity button", toggleActivityChildren);
 
-      document.getElementById("save-settings").addEventListener("click", () => {
-        const input = document.getElementById("password");
+      function saveTime(passwordSelector, targetSelector, channel) {
+        const input = document.getElementById(passwordSelector);
         const pass = input.value;
         input.value = "";
 
         if (pass === parentPassword) {
-          const allowedTimeInput = document.getElementById("allowed-time");
-          const allowedTime = allowedTimeInput.value * 60;
-          window.electron.send("set-allowed-time", allowedTime);
+          const allowedInput = document.getElementById(targetSelector);
+          const coefficient = allowedInput.type === 'number' ? 60 : 1
+          const resultValue = allowedInput.value * coefficient;
+          window.electron.send(channel, resultValue);
         } else {
           alert("Неверный пароль!");
         }
-      });
+      }
+
+      document.getElementById("save-settings").addEventListener("click", () => {saveTime("password", "allowed-time", "set-allowed-time")});
+      document.getElementById("save-iterations").addEventListener("click", () => {saveTime("passw", "iteration-time", "set-iterations-time")});
+      document.getElementById("save-uncontrol").addEventListener("click", () => {saveTime("passv", "uncontrol-range", "set-uncontrol-range")});
 
       document.getElementById("story-button").addEventListener("click", () => {
         clearNode(appsList);
@@ -358,6 +216,25 @@
 
       window.electron.on("time-over", () => {
         passContainer.hidden = false;
+      });
+
+      window.electron.on("time-pause", (time) => {
+        blockedTime = time
+        pauseContainer.hidden = false;
+        const timer = setInterval(() => {
+          const selector = document.getElementById('time-count')
+          if (blockedTime > 0) {
+            blockedTime -= 1
+            selector.textContent = `До окончания перерыва осталось ждать: ${timeUpdater(blockedTime)}`
+          } else {
+            selector.textContent = ''
+            clearInterval(timer)
+          }
+        }, 1000)
+      });
+
+      window.electron.on("time-start", () => {
+        pauseContainer.hidden = true;
       });
     </script>
   </body>
