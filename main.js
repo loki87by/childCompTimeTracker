@@ -1,5 +1,6 @@
 const { app, BrowserWindow, Tray, Menu, ipcMain } = require("electron");
 const path = require("path");
+const fs = require("fs");
 const {
   getActiveApplications,
   getFullActivityReport,
@@ -20,6 +21,7 @@ const activityShifting = process.env["ACTIVITY_SHIFTING"];
 const expressApp = express();
 const port = 5326;
 const processes = [];
+const powershellLogs = [];
 
 let chromeActivityMessages = [];
 let mainWindow;
@@ -97,14 +99,20 @@ const createWindow = () => {
 
 async function videoBlocker() {
   if (vmcVideoActivity && currentVideoPlayer) {
-    await manageWindow(currentVideoPlayer);
+    const log = await manageWindow(currentVideoPlayer);
+    powershellLogs.push('')
+    fs.writeFileSync(path.join(__dirname, "logs.txt"), `${powershellLogs.length + 1}. ${log}`)
     vmcVideoActivity = false;
     currentVideoPlayer = null;
   }
   if (chromeVideoActivity) {
     const res = await manageWindow(currentBrowser);
+    powershellLogs.push(``)
+    fs.writeFileSync(path.join(__dirname, "logs.txt"), `${powershellLogs.length + 1}. ${log}`)
     if (res !== "OK") {
-      await manageWindow(currentBrowser, true);
+      const log = await manageWindow(currentBrowser, true);
+      powershellLogs.push(``)
+      fs.writeFileSync(path.join(__dirname, "logs.txt"), `${powershellLogs.length + 1}. ${log}`)
     }
     chromeVideoActivity = false;
   }

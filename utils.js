@@ -8,27 +8,42 @@ dotenv.config({ path: envPath });
 
 const allowedApps = process.env["ALLOWED_APPS"].split(",");
 
+let isProcessRunning = false;
+
 module.exports.manageWindow = (processName, power) => {
   if (
     allowedApps
       .map((i) => i.toLowerCase())
       .includes(processName.toLowerCase().trim())
-  )
+  ) {
     return;
+  }
+
+  isProcessRunning = true;
   const psScript = path.join(
     __dirname,
     power ? "ManageWindows.ps1" : "SimulateKeyPress.ps1"
   );
   return new Promise((resolve, reject) => {
+    if (isProcessRunning) {
+      return Promise.reject(
+        `Пропущено выполнение, так как уже запущен процесс для ${processName}.`
+      );
+    }
     exec(
       `powershell.exe -ExecutionPolicy Bypass -File "${psScript}" -processName "${processName}"`,
       (error, stdout, stderr) => {
         if (error) {
+          isProcessRunning = false;
           reject(`Ошибка: ${error.message}`);
+          return;
         }
         if (stderr) {
+          isProcessRunning = false;
           reject(`Ошибка: ${stderr}`);
+          return;
         }
+        isProcessRunning = false;
         resolve(`${stdout}`);
       }
     );

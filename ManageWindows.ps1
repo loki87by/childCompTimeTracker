@@ -65,24 +65,24 @@ if ($processes) {
             $hasCaption = ($style -band 0xC00000) -ne 0 # WS_CAPTION AND WS_THICKFRAME
 
             if ($isFullscreen -or ($isPopup -and -not $hasCaption)) {
-                Write-Host "Окно '$processName' находится в полноэкранном режиме. Симуляция нажатия F11..."
+                Write-Host "ISFULLSCREEN"#"Окно '$processName' находится в полноэкранном режиме. Симуляция нажатия F11..."
                 
                 # Симуляция нажатия ESC и пробела
                 [System.Windows.Forms.SendKeys]::SendWait(" ")
                 [System.Windows.Forms.SendKeys]::SendWait("{ESC}")
             } else {
-                Write-Host "Окно '$processName' не находится в полноэкранном режиме."
+                Write-Host "NOTFULLSCREEN"#"Окно '$processName' не находится в полноэкранном режиме."
             }
 
             # Минимизируем окно
             [User32WinAPI]::ShowWindow($hwnd, 2) # SW_MINIMIZE
-            Write-Host "Окно '$processName' было минимизировано."
+            Write-Host "BEENMINIMIZED"#"Окно '$processName' было минимизировано."
         } else {
-            Write-Host "Не удалось получить размеры окна."
+            Write-Host "HAVENTSIZES"#"Не удалось получить размеры окна."
         }
     } else {
-        Write-Host "У процессов с именем '$processName' нет активного окна."
+        Write-Host "NOTACTIVE"#"У процессов с именем '$processName' нет активного окна."
     }
 } else {
-    Write-Host "Процесс с указанным именем '$processName' не найден."
+    Write-Host "NOTFOUND"#"Процесс с указанным именем '$processName' не найден."
 }
