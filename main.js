@@ -39,6 +39,7 @@ let vmcVideoActivity = false;
 let currentVideoPlayer;
 let currentBrowser;
 let date = new Date().toISOString().slice(0, 10);
+const activityTypes = [`Активность мыши`, `Ввод текста`, "Воспроизведение видео"];
 
 if (iterationTime >= allowedTime) {
   iterationTime = 24 * 60 * 60
@@ -140,7 +141,7 @@ function closeFullscreen() {
 }
 
 function updateBrowserActivity(array) {
-  const arr = array.slice();
+  const arr = JSON.parse(JSON.stringify(array))
   const oneMinute = activityShifting * 1000;
   const length = arr.length;
   let activeIndices = [];
@@ -160,8 +161,8 @@ function updateBrowserActivity(array) {
     if (
       endTime - startTime < oneMinute &&
       arr[startIdx].body.src === arr[endIdx].body.src &&
-      [`Активность мыши`, `Ввод текста`].includes(arr[startIdx].body.type) &&
-      [`Активность мыши`, `Ввод текста`].includes(arr[endIdx].body.type)
+      activityTypes.includes(arr[startIdx].body.type) &&
+      activityTypes.includes(arr[endIdx].body.type)
     ) {
       for (let j = startIdx + 1; j < endIdx; j++) {
         const current = arr[j];
@@ -176,8 +177,8 @@ function updateBrowserActivity(array) {
       }
     }
   }
-
-  return arr;
+  const res = Array.from(new Set(arr))
+  return res;
 }
 
 const getGoogleActivity = () => {
