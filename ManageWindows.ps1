@@ -1,5 +1,6 @@
 param(
-    [string]$processName
+    [string]$processName,
+    [switch]$skipSpaceSimulation
 )
 
 # Используем P/Invoke для вызова WinAPI
@@ -46,7 +47,6 @@ if ($processes) {
 
     if ($process) {
         $hwnd = $process.MainWindowHandle
-
         # Получаем размеры окна
         $rect = New-Object User32WinAPI+RECT
         $success = [User32WinAPI]::GetWindowRect($hwnd, [ref]$rect)
@@ -55,10 +55,8 @@ if ($processes) {
             # Определяем размеры экрана
             $screenWidth = [System.Windows.Forms.SystemInformation]::VirtualScreen.Width
             $screenHeight = [System.Windows.Forms.SystemInformation]::VirtualScreen.Height
-            
             # Проверяем, находится ли окно в полноэкранном режиме
             $isFullscreen = (($rect.Right - $rect.Left) -eq $screenWidth -and ($rect.Bottom - $rect.Top) -eq $screenHeight)
-
             # Проверяем стиль окна
             $style = [User32WinAPI]::GetWindowLong($hwnd, -16) # GWL_STYLE
             $isPopup = ($style -band 0x80000000) -ne 0 # WS_POPUP
@@ -67,8 +65,10 @@ if ($processes) {
             if ($isFullscreen -or ($isPopup -and -not $hasCaption)) {
                 Write-Host "ISFULLSCREEN"#"Окно '$processName' находится в полноэкранном режиме. Симуляция нажатия F11..."
                 
-                # Симуляция нажатия ESC и пробела
-                [System.Windows.Forms.SendKeys]::SendWait(" ")
+                # Симуляция нажатия ESC и пробела если не установлен флаг
+                if (-not $skipSpaceSimulation) {
+                    [System.Windows.Forms.SendKeys]::SendWait(" ")
+                }
                 [System.Windows.Forms.SendKeys]::SendWait("{ESC}")
             } else {
                 Write-Host "NOTFULLSCREEN"#"Окно '$processName' не находится в полноэкранном режиме."

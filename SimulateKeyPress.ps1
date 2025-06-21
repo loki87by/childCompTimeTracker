@@ -1,5 +1,6 @@
 param(
-    [string]$processName
+    [string]$processName,
+    [switch]$skipSpaceSimulation
 )
 
 # Используем P/Invoke для вызова WinAPI
@@ -33,15 +34,15 @@ if ($processes) {
 
     if ($process) {
         $hwnd = $process.MainWindowHandle
-
         # Устанавливаем фокус на окно процесса
         [User32Keyboard]::SetForegroundWindow($hwnd)
 
-        # Имитируем нажатие "Пробел"
-        [User32Keyboard]::keybd_event([User32Keyboard]::VK_SPACE, 0, 0, [UIntPtr]::Zero) # Нажатие
-        Start-Sleep -Milliseconds 100 # Задержка между нажатиями
-        [User32Keyboard]::keybd_event([User32Keyboard]::VK_SPACE, 0, [User32Keyboard]::KEYEVENTF_KEYUP, [UIntPtr]::Zero) # Отпускание
-        
+        if (-not $skipSpaceSimulation) {
+            # Симуляция пробела только если флаг не установлен
+            [User32Keyboard]::keybd_event([User32Keyboard]::VK_SPACE, 0, 0, [UIntPtr]::Zero) # Нажатие
+            Start-Sleep -Milliseconds 100 # Задержка между нажатиями
+            [User32Keyboard]::keybd_event([User32Keyboard]::VK_SPACE, 0, [User32Keyboard]::KEYEVENTF_KEYUP, [UIntPtr]::Zero) # Отпускание
+        }
         # Имитируем нажатие "Escape"
         [User32Keyboard]::keybd_event([User32Keyboard]::VK_ESCAPE, 0, 0, [UIntPtr]::Zero) # Нажатие
         Start-Sleep -Milliseconds 100 # Задержка

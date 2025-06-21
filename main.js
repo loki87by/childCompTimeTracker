@@ -24,6 +24,7 @@ const processes = [];
 const powershellLogs = [];
 
 let chromeActivityMessages = [];
+let savedActivityMessages = [];
 let mainWindow;
 let tray;
 let timer;
@@ -39,10 +40,14 @@ let vmcVideoActivity = false;
 let currentVideoPlayer;
 let currentBrowser;
 let date = new Date().toISOString().slice(0, 10);
-const activityTypes = [`Активность мыши`, `Ввод текста`, "Воспроизведение видео"];
+const activityTypes = [
+  `Активность мыши`,
+  `Ввод текста`,
+  "Воспроизведение видео",
+];
 
 if (iterationTime >= allowedTime) {
-  iterationTime = 24 * 60 * 60
+  iterationTime = 24 * 60 * 60;
 }
 
 expressApp.use(bodyParser.json());
@@ -101,19 +106,47 @@ const createWindow = () => {
 async function videoBlocker() {
   if (vmcVideoActivity && currentVideoPlayer) {
     const log = await manageWindow(currentVideoPlayer);
-    powershellLogs.push('')
-    fs.writeFileSync(path.join(__dirname, "logs.txt"), `${powershellLogs.length + 1}. ${log}`)
+    powershellLogs.push("");
+    fs.writeFileSync(
+      path.join(__dirname, "logs.txt"),
+      `${powershellLogs.length + 1}. ${log}`
+    );
     vmcVideoActivity = false;
     currentVideoPlayer = null;
   }
   if (chromeVideoActivity) {
-    const res = await manageWindow(currentBrowser);
-    powershellLogs.push(``)
-    fs.writeFileSync(path.join(__dirname, "logs.txt"), `${powershellLogs.length + 1}. ${log}`)
+    const lastVideoActivity = [...chromeActivityMessages]
+      .reverse()
+      .find(msg => msg.body.activity && msg.body.type === "Воспроизведение видео");
+    
+    const isRutube = lastVideoActivity?.body?.src?.includes('rutube') || false;
+    
+    if (!isRutube && lastVideoActivity) {
+      try {
+        await mainWindow.webContents.send('pause-video', lastVideoActivity.body.src);
+      } catch (e) {
+        console.error('Ошибка при отправке pause команды:', e);
+      }
+    }
+    
+    const res = await manageWindow(currentBrowser, { 
+      skipSpaceSimulation: !isRutube
+    });
+    powershellLogs.push(``);
+    fs.writeFileSync(
+      path.join(__dirname, "logs.txt"),
+      `${powershellLogs.length + 1}. ${log}`
+    );
     if (res !== "OK") {
-      const log = await manageWindow(currentBrowser, true);
-      powershellLogs.push(``)
-      fs.writeFileSync(path.join(__dirname, "logs.txt"), `${powershellLogs.length + 1}. ${log}`)
+      const log = await manageWindow(currentBrowser, { 
+        skipSpaceSimulation: !isRutube,
+        forcePowerShell: true
+      });
+      powershellLogs.push(``);
+      fs.writeFileSync(
+        path.join(__dirname, "logs.txt"),
+        `${powershellLogs.length + 1}. ${log}`
+      );
     }
     chromeVideoActivity = false;
   }
@@ -136,12 +169,12 @@ function closeFullscreen() {
     mainWindow.setFullScreen(false);
     mainWindow.setAlwaysOnTop(false);
     isFullscreen = false;
-    mainWindow.hide()
+    mainWindow.hide();
   }
 }
 
 function updateBrowserActivity(array) {
-  const arr = JSON.parse(JSON.stringify(array))
+  const arr = JSON.parse(JSON.stringify(array));
   const oneMinute = activityShifting * 1000;
   const length = arr.length;
   let activeIndices = [];
@@ -177,7 +210,65 @@ function updateBrowserActivity(array) {
       }
     }
   }
-  const res = Array.from(new Set(arr))
+  const res = Array.from(new Set(arr));
+
+  if (res.length >= 600) {
+    const empty = res.every((i) => !i.body.activity);
+    const centerIndex = Math.floor(res.length / 2);
+    const centerElement = res[centerIndex];
+
+    if (empty) {
+      chromeActivityMessages = chromeActivityMessages.filter(
+        (i) => i.ts > centerElement.ts
+      );
+      return res;
+    }
+
+    let leftIndex, rightIndex;
+
+    for (let i = centerIndex - 1; i >= 0; i--) {
+      if (
+        res[i].body.activity !== centerElement.body.activity ||
+        res[i].body.src !== centerElement.body.src ||
+        res[i].body.type !== centerElement.body.type
+      ) {
+        leftIndex = i;
+        break;
+      }
+    }
+
+    for (let i = centerIndex + 1; i < res.length; i++) {
+      if (
+        res[i].body.activity !== centerElement.body.activity ||
+        res[i].body.src !== centerElement.body.src ||
+        res[i].body.type !== centerElement.body.type
+      ) {
+        rightIndex = i;
+        break;
+      }
+    }
+    const leftShift = centerIndex - leftIndex;
+    const rightShift = rightIndex - centerIndex;
+    const currentShift =
+      leftShift && !isNaN(leftShift) && rightShift && !isNaN(rightShift)
+        ? Math.min(rightShift, leftShift)
+        : (!leftShift || isNaN(leftShift)) && !rightShift && isNaN(rightShift)
+        ? null
+        : !leftShift || isNaN(leftShift)
+        ? rightShift
+        : leftShift;
+
+    if (currentShift) {
+      const currentIndex =
+        currentShift === rightShift ? center + rightShift : center - leftShift;
+        const ts = res[currentIndex].ts
+        const preDeleted = res.filter(i => i.ts <= ts).filter(i => i.body.activity)
+savedActivityMessages.push(...preDeleted)
+      chromeActivityMessages = chromeActivityMessages.filter(
+        (i) => i.ts > ts
+      );
+    }
+  }
   return res;
 }
 
@@ -194,7 +285,7 @@ const getGoogleActivity = () => {
     return p;
   }, []);
   const changedBrowserActivity = updateBrowserActivity(filteredCAM);
-  return changedBrowserActivity.filter((i) => i.body.activity);
+  return [...savedActivityMessages, ...changedBrowserActivity].filter((i) => i.body.activity);
 };
 
 const getReport = () => {
@@ -309,10 +400,10 @@ if (!app.requestSingleInstanceLock()) {
   app.quit();
 }
 
-app.on('second-instance', (event, commandLine, workingDirectory) => {
+app.on("second-instance", (event, commandLine, workingDirectory) => {
   if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
   }
 });
 
@@ -378,7 +469,7 @@ ipcMain.on("set-allowed-time", (event, time) => {
 ipcMain.on("set-iterations-time", (event, time) => {
   iterationTime = time;
   if (time >= allowedTime) {
-    iterationTime = 24 * 60 * 60
+    iterationTime = 24 * 60 * 60;
   }
 });
 

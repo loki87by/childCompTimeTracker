@@ -10,7 +10,7 @@ const allowedApps = process.env["ALLOWED_APPS"].split(",");
 
 let isProcessRunning = false;
 
-module.exports.manageWindow = (processName, power) => {
+/* module.exports.manageWindow = (processName, power) => {
   if (
     allowedApps
       .map((i) => i.toLowerCase())
@@ -48,7 +48,33 @@ module.exports.manageWindow = (processName, power) => {
       }
     );
   });
+}; */
+module.exports.manageWindow = (processName, options = {}) => {
+  const { skipSpaceSimulation = false, forcePowerShell = false } = options;
+
+  if (allowedApps.map(i => i.toLowerCase()).includes(processName.toLowerCase().trim())) {
+    return;
+  }
+
+  isProcessRunning = true;
+  const psScript = path.join(__dirname, forcePowerShell ? "ManageWindows.ps1" : "SimulateKeyPress.ps1");
+  
+  return new Promise((resolve, reject) => {
+    if (isProcessRunning) {
+      return reject(`Пропущено выполнение, так как уже запущен процесс для ${processName}.`);
+    }
+    
+    const command = `powershell.exe -ExecutionPolicy Bypass -File "${psScript}" -processName "${processName}" ${skipSpaceSimulation ? '-skipSpaceSimulation' : ''}`;
+    
+    exec(command, (error, stdout, stderr) => {
+      isProcessRunning = false;
+      if (error) return reject(`Ошибка: ${error.message}`);
+      if (stderr) return reject(`Ошибка: ${stderr}`);
+      resolve(`${stdout}`);
+    });
+  });
 };
+
 
 module.exports.getActiveApplications = async () => {
   const command = `Get-Process | Where-Object { $_.MainWindowTitle } | Select-Object Id, CPU, ProcessName, StartTime, MainWindowHandle, Responding, MainWindowTitle | Format-Table -AutoSize`;
