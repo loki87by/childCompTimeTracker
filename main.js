@@ -117,20 +117,25 @@ async function videoBlocker() {
   if (chromeVideoActivity) {
     const lastVideoActivity = [...chromeActivityMessages]
       .reverse()
-      .find(msg => msg.body.activity && msg.body.type === "Воспроизведение видео");
-    
-    const isRutube = lastVideoActivity?.body?.src?.includes('rutube') || false;
-    
+      .find(
+        (msg) => msg.body.activity && msg.body.type === "Воспроизведение видео"
+      );
+
+    const isRutube = lastVideoActivity?.body?.src?.includes("rutube") || false;
+
     if (!isRutube && lastVideoActivity) {
       try {
-        await mainWindow.webContents.send('pause-video', lastVideoActivity.body.src);
+        await mainWindow.webContents.send(
+          "pause-video",
+          lastVideoActivity.body.src
+        );
       } catch (e) {
-        console.error('Ошибка при отправке pause команды:', e);
+        console.error("Ошибка при отправке pause команды:", e);
       }
     }
-    
-    const res = await manageWindow(currentBrowser, { 
-      skipSpaceSimulation: !isRutube
+
+    const res = await manageWindow(currentBrowser, {
+      skipSpaceSimulation: !isRutube,
     });
     powershellLogs.push(``);
     fs.writeFileSync(
@@ -138,9 +143,9 @@ async function videoBlocker() {
       `${powershellLogs.length + 1}. ${log}`
     );
     if (res !== "OK") {
-      const log = await manageWindow(currentBrowser, { 
+      const log = await manageWindow(currentBrowser, {
         skipSpaceSimulation: !isRutube,
-        forcePowerShell: true
+        forcePowerShell: true,
       });
       powershellLogs.push(``);
       fs.writeFileSync(
@@ -261,12 +266,12 @@ function updateBrowserActivity(array) {
     if (currentShift) {
       const currentIndex =
         currentShift === rightShift ? center + rightShift : center - leftShift;
-        const ts = res[currentIndex].ts
-        const preDeleted = res.filter(i => i.ts <= ts).filter(i => i.body.activity)
-savedActivityMessages.push(...preDeleted)
-      chromeActivityMessages = chromeActivityMessages.filter(
-        (i) => i.ts > ts
-      );
+      const ts = res[currentIndex].ts;
+      const preDeleted = res
+        .filter((i) => i.ts <= ts)
+        .filter((i) => i.body.activity);
+      savedActivityMessages.push(...preDeleted);
+      chromeActivityMessages = chromeActivityMessages.filter((i) => i.ts > ts);
     }
   }
   return res;
@@ -285,7 +290,9 @@ const getGoogleActivity = () => {
     return p;
   }, []);
   const changedBrowserActivity = updateBrowserActivity(filteredCAM);
-  return [...savedActivityMessages, ...changedBrowserActivity].filter((i) => i.body.activity);
+  return [...savedActivityMessages, ...changedBrowserActivity].filter(
+    (i) => i.body.activity
+  );
 };
 
 const getReport = () => {
@@ -357,6 +364,12 @@ async function checkActiveApplications() {
     processes.forEach((i) => (i.date = new Date()));
     activityTimer = 0;
     iterationTimeCount = 0;
+    chromeActivityMessages = [];
+    savedActivityMessages = [];
+    isTimeOver = false;
+    isFullscreen = false;
+    chromeVideoActivity = false;
+    vmcVideoActivity = false;
   }
 
   if (!isTimeOver) {
