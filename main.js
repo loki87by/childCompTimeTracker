@@ -265,7 +265,7 @@ function updateBrowserActivity(array) {
 
     if (currentShift) {
       const currentIndex =
-        currentShift === rightShift ? center + rightShift : center - leftShift;
+        currentShift === rightShift ? centerIndex + rightShift : centerIndex - leftShift;
       const ts = res[currentIndex].ts;
       const preDeleted = res
         .filter((i) => i.ts <= ts)
